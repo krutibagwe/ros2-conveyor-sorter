@@ -1,0 +1,12 @@
+controller_node:
+  ros__parameters:
+    pid_kp: 1.2
+    pid_ki: 0.1
+    pid_kd: 0.05
+    target_speed: 1.0
+
+conveyor_node:
+  ros__parameters:
+    pid_kp: 1.0
+    pid_ki: 0.05
+    pid_kd: 0.02

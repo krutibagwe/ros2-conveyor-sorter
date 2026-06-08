@@ -1,0 +1,83 @@
+<?xml version="1.0"?>
+<robot name="conveyor_system" xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <!-- Base link (world frame reference) -->
+  <link name="world"/>
+
+  <!-- Conveyor base frame -->
+  <link name="conveyor_base">
+    <visual>
+      <geometry>
+        <box size="3.0 0.5 0.05"/>
+      </geometry>
+      <material name="dark_grey">
+        <color rgba="0.3 0.3 0.3 1.0"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="3.0 0.5 0.05"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="10.0"/>
+      <inertia ixx="1.0" ixy="0" ixz="0"
+               iyy="1.0" iyz="0" izz="1.0"/>
+    </inertial>
+  </link>
+
+  <joint name="world_to_conveyor" type="fixed">
+    <parent link="world"/>
+    <child link="conveyor_base"/>
+    <origin xyz="0 0 0.5" rpy="0 0 0"/>
+  </joint>
+
+  <!-- Camera mount frame -->
+  <link name="camera_link">
+    <visual>
+      <geometry>
+        <box size="0.05 0.05 0.05"/>
+      </geometry>
+      <material name="black">
+        <color rgba="0.1 0.1 0.1 1.0"/>
+      </material>
+    </visual>
+  </link>
+
+  <joint name="conveyor_to_camera" type="fixed">
+    <parent link="conveyor_base"/>
+    <child link="camera_link"/>
+    <origin xyz="0 0 1.5" rpy="0 1.5708 0"/>
+  </joint>
+
+  <!-- Sorting gate frame -->
+  <link name="sorting_gate">
+    <visual>
+      <geometry>
+        <box size="0.02 0.5 0.2"/>
+      </geometry>
+      <material name="orange">
+        <color rgba="1.0 0.5 0.0 1.0"/>
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+        <box size="0.02 0.5 0.2"/>
+      </geometry>
+    </collision>
+    <inertial>
+      <mass value="0.5"/>
+      <inertia ixx="0.01" ixy="0" ixz="0"
+               iyy="0.01" iyz="0" izz="0.01"/>
+    </inertial>
+  </link>
+
+  <joint name="conveyor_to_gate" type="revolute">
+    <parent link="conveyor_base"/>
+    <child link="sorting_gate"/>
+    <origin xyz="1.2 0 0.15" rpy="0 0 0"/>
+    <axis xyz="0 0 1"/>
+    <limit lower="-1.57" upper="1.57" effort="10" velocity="2.0"/>
+  </joint>
+
+</robot>

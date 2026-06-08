@@ -1,0 +1,20 @@
+vision_node:
+  ros__parameters:
+    red_h_min: 0
+    red_h_max: 10
+    red_s_min: 100
+    red_s_max: 255
+    red_v_min: 100
+    red_v_max: 255
+    blue_h_min: 110
+    blue_h_max: 130
+    blue_s_min: 100
+    blue_s_max: 255
+    blue_v_min: 100
+    blue_v_max: 255
+    green_h_min: 50
+    green_h_max: 70
+    green_s_min: 100
+    green_s_max: 255
+    green_v_min: 100
+    green_v_max: 255

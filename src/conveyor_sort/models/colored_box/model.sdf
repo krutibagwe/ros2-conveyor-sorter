@@ -1,0 +1,35 @@
+<?xml version="1.0"?>
+<sdf version="1.6">
+  <model name="colored_box">
+    <link name="box_link">
+      <pose>0 0 0 0 0 0</pose>
+      <inertial>
+        <mass>0.1</mass>
+        <inertia>
+          <ixx>0.0001</ixx><iyy>0.0001</iyy><izz>0.0001</izz>
+          <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz>
+        </inertia>
+      </inertial>
+      <collision name="box_collision">
+        <geometry>
+          <box><size>0.08 0.08 0.08</size></box>
+        </geometry>
+        <surface>
+          <friction>
+            <ode><mu>0.8</mu><mu2>0.8</mu2></ode>
+          </friction>
+        </surface>
+      </collision>
+      <visual name="box_visual">
+        <geometry>
+          <box><size>0.08 0.08 0.08</size></box>
+        </geometry>
+        <material>
+          <!-- Default red; color overridden at spawn time -->
+          <ambient>0.8 0.0 0.0 1</ambient>
+          <diffuse>0.8 0.0 0.0 1</diffuse>
+        </material>
+      </visual>
+    </link>
+  </model>
+</sdf>
