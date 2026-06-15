@@ -29,6 +29,9 @@ public:
     jam_sim_sub_ = this->create_subscription<std_msgs::msg::String>(
       "/jam_sim_status", 10,
       std::bind(&RvizDisplayNode::jam_sim_callback, this, std::placeholders::_1));
+    belt_state_sub_ = this->create_subscription<std_msgs::msg::String>(
+      "/belt_status", 10,
+      std::bind(&RvizDisplayNode::belt_state_callback, this, std::placeholders::_1));
 
     marker_pub_ = this->create_publisher<visualization_msgs::msg::MarkerArray>(
       "/conveyor_markers", 10);
@@ -79,6 +82,12 @@ private:
 
   void active_box_callback(const std_msgs::msg::String::SharedPtr msg) {
     std::string data = msg->data;
+    if (data == "none,0.0,0.0,idle") {
+      active_box_visible_ = false;
+      active_color_       = "";
+      active_state_       = "idle";
+      return;
+    }
     std::vector<std::string> parts;
     std::stringstream ss(data);
     std::string token;
@@ -95,6 +104,10 @@ private:
 
   void jam_sim_callback(const std_msgs::msg::String::SharedPtr msg) {
     jam_simulated_ = (msg->data == "JAM_ACTIVE");
+  }
+
+  void belt_state_callback(const std_msgs::msg::String::SharedPtr msg) {
+    belt_state_ = msg->data;
   }
 
   // ── Marker helpers ─────────────────────────────────────────────────────────
@@ -137,6 +150,16 @@ private:
     return m;
   }
 
+  visualization_msgs::msg::Marker make_delete(int id) {
+    visualization_msgs::msg::Marker m;
+    m.header.frame_id = "world";
+    m.header.stamp    = this->now();
+    m.ns              = "conveyor";
+    m.id              = id;
+    m.action          = visualization_msgs::msg::Marker::DELETE;
+    return m;
+  }
+
   void color_from_name(const std::string & name,
     float & r, float & g, float & b)
   {
@@ -172,6 +195,9 @@ private:
   void publish_markers() {
     visualization_msgs::msg::MarkerArray arr;
 
+    // Determine jam state first — used throughout
+    bool is_jammed = jam_detected_ || jam_simulated_ || belt_state_ == "JAMMED";
+
     // 1. Conveyor belt
     arr.markers.push_back(make_marker(
       0, visualization_msgs::msg::Marker::CUBE,
@@ -186,16 +212,15 @@ private:
       3.55, 0.03, 0.12,
       0.5f, 0.5f, 0.5f, 1.0f));
 
-    // 3. Pusher arrows — red, blue, green, misc (no pusher for misc)
-    bool pushing       = (active_state_ == "pushing");
-    bool is_misc_push  = pushing && (active_color_ != "red" &&
-                                     active_color_ != "blue" &&
-                                     active_color_ != "green");
+    // 3. Pusher arrows — only show when not jammed
+    bool pushing      = (active_state_ == "pushing") && !is_jammed;
+    bool is_misc_push = pushing && (active_color_ != "red" &&
+                                    active_color_ != "blue" &&
+                                    active_color_ != "green");
     push_arrow(arr, 3, -0.8, pushing && active_color_ == "red");
     push_arrow(arr, 4,  0.2, pushing && active_color_ == "blue");
     push_arrow(arr, 5,  1.2, pushing && active_color_ == "green");
 
-    // Misc "drop" indicator at end of belt
     arr.markers.push_back(make_marker(
       25, visualization_msgs::msg::Marker::ARROW,
       1.7, 0.18, 0.58,
@@ -206,67 +231,63 @@ private:
       is_misc_push ? 0.1f : 0.5f,
       is_misc_push ? 1.0f : 0.25f));
 
-    // 4. Bins on the side
-    // Red bin
+    // 4. Bins
     arr.markers.push_back(make_marker(
-      6, visualization_msgs::msg::Marker::CUBE,
-      -0.8, -0.65, 0.12,
-      0.35, 0.3, 0.25,
+      6,  visualization_msgs::msg::Marker::CUBE,
+      -0.8, -0.65, 0.12, 0.35, 0.3, 0.25,
       0.7f, 0.1f, 0.1f, 0.6f));
-    // Blue bin
     arr.markers.push_back(make_marker(
-      7, visualization_msgs::msg::Marker::CUBE,
-      0.2, -0.65, 0.12,
-      0.35, 0.3, 0.25,
+      7,  visualization_msgs::msg::Marker::CUBE,
+       0.2, -0.65, 0.12, 0.35, 0.3, 0.25,
       0.1f, 0.2f, 0.8f, 0.6f));
-    // Green bin
     arr.markers.push_back(make_marker(
-      8, visualization_msgs::msg::Marker::CUBE,
-      1.2, -0.65, 0.12,
-      0.35, 0.3, 0.25,
+      8,  visualization_msgs::msg::Marker::CUBE,
+       1.2, -0.65, 0.12, 0.35, 0.3, 0.25,
       0.1f, 0.7f, 0.1f, 0.6f));
-    // Misc bin — grey, at end of belt
     arr.markers.push_back(make_marker(
-      9, visualization_msgs::msg::Marker::CUBE,
-      1.7, -0.65, 0.12,
-      0.35, 0.3, 0.25,
+      9,  visualization_msgs::msg::Marker::CUBE,
+       1.7, -0.65, 0.12, 0.35, 0.3, 0.25,
       0.6f, 0.6f, 0.6f, 0.6f));
 
-    // 5. Bin labels with live counts
+    // 5. Bin labels with counts
     arr.markers.push_back(make_text(
       10, -0.8, -0.95, 0.52,
       "RED\n" + std::to_string(bin_red_),
       0.9f, 0.3f, 0.3f, 0.16f));
     arr.markers.push_back(make_text(
-      11, 0.2, -0.95, 0.52,
+      11,  0.2, -0.95, 0.52,
       "BLUE\n" + std::to_string(bin_blue_),
       0.3f, 0.4f, 0.9f, 0.16f));
     arr.markers.push_back(make_text(
-      12, 1.2, -0.95, 0.52,
+      12,  1.2, -0.95, 0.52,
       "GREEN\n" + std::to_string(bin_green_),
       0.2f, 0.8f, 0.2f, 0.16f));
     arr.markers.push_back(make_text(
-      14, 1.7, -0.95, 0.52,
+      14,  1.7, -0.95, 0.52,
       "MISC\n" + std::to_string(bin_misc_),
       0.7f, 0.7f, 0.7f, 0.16f));
 
     // 6. Total count
     int total = bin_red_ + bin_blue_ + bin_green_ + bin_misc_;
     arr.markers.push_back(make_text(
-      13, 0.2, 0.05, 2.5,
+      13, 0.175, 0.05, 2.0,
       "Total sorted: " + std::to_string(total),
       0.9f, 0.9f, 0.9f, 0.13f));
 
-    // 7. Active box
+    // 7. Active box on belt
     if (active_box_visible_ && !active_color_.empty()) {
       float r, g, b;
       color_from_name(active_color_, r, g, b);
+
+      float alpha = (active_state_ == "paused"  ||
+                     active_state_ == "stopped" ||
+                     active_state_ == "jammed") ? 0.35f : 1.0f;
 
       arr.markers.push_back(make_marker(
         20, visualization_msgs::msg::Marker::CUBE,
         active_x_, active_y_, 0.6,
         0.1, 0.1, 0.1,
-        r, g, b, 1.0f));
+        r, g, b, alpha));
 
       arr.markers.push_back(make_text(
         21, active_x_, active_y_, 0.82,
@@ -274,38 +295,57 @@ private:
         r, g, b, 0.12f));
     }
 
-    // 8. Jam status — simulated jam takes priority over sensor jam
-    bool show_jam    = jam_detected_ || jam_simulated_;
-    std::string jam_text = jam_simulated_
-      ? "SIMULATED JAM!\nBelt Frozen\n(auto-clears in 8s)"
-      : ("JAM DETECTED\n" + jam_reason_
-          + "\nDuration: "
-          + std::to_string(static_cast<int>(jam_duration_)) + "s");
+    // 8. STATUS BAR — single bar above belt, handles all states
+    // Reference: RUNNING = green bar + "RUNNING | System OK"
+    // Jammed = same position, red bar + jam text
+    {
+      std::string top_text;
+      float tr, tg, tb;
+      float br, bg, bb, ba;
 
-    if (show_jam) {
-      arr.markers.push_back(make_marker(
-        30, visualization_msgs::msg::Marker::CUBE,
-        0.175, 0.05, 1.2,
-        3.55, 0.4, 0.06,
-        1.0f, 0.0f, 0.0f, 0.7f));
-      arr.markers.push_back(make_text(
-        31, 0.175, 0.05, 1.65,
-        jam_text,
-        1.0f, 0.2f, 0.2f, 0.18f));
-    } else {
+      if (is_jammed) {
+        top_text = jam_simulated_
+          ? "SIMULATED JAM  |  Belt Frozen  |  Send RESUME or RESET"
+          : "JAM DETECTED  |  Belt Frozen  |  Send RESUME or RESET";
+        tr=1.0f; tg=0.3f; tb=0.1f;
+        br=1.0f; bg=0.0f; bb=0.0f; ba=0.6f;
+
+      } else if (belt_state_ == "PAUSED") {
+        top_text = "PAUSED  |  Belt Frozen  |  Send RESUME to continue";
+        tr=0.9f; tg=0.9f; tb=0.1f;
+        br=0.9f; bg=0.9f; bb=0.1f; ba=0.4f;
+
+      } else if (belt_state_ == "STOPPED") {
+        top_text = "STOPPED  |  Send START to begin";
+        tr=0.9f; tg=0.5f; tb=0.1f;
+        br=0.9f; bg=0.5f; bb=0.1f; ba=0.4f;
+
+      } else {
+        top_text = "RUNNING  |  System OK";
+        tr=0.2f; tg=1.0f; tb=0.2f;
+        br=0.0f; bg=1.0f; bb=0.0f; ba=0.3f;
+      }
+
       arr.markers.push_back(make_marker(
         30, visualization_msgs::msg::Marker::CUBE,
         0.175, 0.05, 1.1,
-        3.55, 0.4, 0.03,
-        0.0f, 1.0f, 0.0f, 0.3f));
+        3.55, 0.4, 0.04,
+        br, bg, bb, ba));
+
       arr.markers.push_back(make_text(
-        31, 0.175, 0.05, 2.0,
-        "System OK",
-        0.2f, 1.0f, 0.2f, 0.14f));
+        31, 0.175, 0.05, 1.38,
+        top_text,
+        tr, tg, tb, 0.15f));
     }
+
+    // Always delete the old bottom jam markers (no longer used)
+    arr.markers.push_back(make_delete(32));
+    arr.markers.push_back(make_delete(33));
 
     marker_pub_->publish(arr);
   }
+
+    
 
   // ── Members ────────────────────────────────────────────────────────────────
 
@@ -315,6 +355,7 @@ private:
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr              count_sub_;
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr              active_box_sub_;
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr              jam_sim_sub_;
+  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr              belt_state_sub_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr  marker_pub_;
   rclcpp::TimerBase::SharedPtr timer_;
 
@@ -326,7 +367,7 @@ private:
   double active_x_            = -1.35;
   double active_y_            =  0.05;
   std::string active_color_;
-  std::string active_state_   = "moving";
+  std::string active_state_   = "idle";
   bool active_box_visible_    = false;
 
   bool jam_detected_          = false;
@@ -335,6 +376,7 @@ private:
   float jam_duration_         = 0.0f;
 
   std::string last_sorted_;
+  std::string belt_state_     = "STOPPED";
 
   int bin_red_   = 0;
   int bin_blue_  = 0;

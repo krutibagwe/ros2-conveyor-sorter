@@ -1,5 +1,6 @@
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/float32.hpp"
+#include "std_msgs/msg/string.hpp"
 #include "conveyor_sort/msg/object_position.hpp"
 #include "conveyor_sort/msg/jam_alert.hpp"
 
@@ -10,6 +11,9 @@ public:
     speed_sub_ = this->create_subscription<std_msgs::msg::Float32>(
       "/conveyor_speed", 10,
       std::bind(&JamMonitorNode::speed_callback, this, std::placeholders::_1));
+    belt_status_sub_ = this->create_subscription<std_msgs::msg::String>(
+      "/belt_status", 10,
+      std::bind(&JamMonitorNode::belt_status_callback, this, std::placeholders::_1));
 
     jam_pub_ = this->create_publisher<conveyor_sort::msg::JamAlert>(
       "/jam_alert", 10);
@@ -30,6 +34,15 @@ private:
     speed_received_ = true;
   }
 
+  void belt_status_callback(const std_msgs::msg::String::SharedPtr msg) {
+    belt_state_ = msg->data;
+    // Reset jam timer whenever belt is not actively running
+    if (belt_state_ != "RUNNING") {
+      time_speed_low_ = 0.0;
+      jam_duration_   = 0.0;
+    }
+  }
+
   void check_jam() {
     auto now = this->now();
     double dt = (now - last_time_).seconds();
@@ -37,20 +50,16 @@ private:
     if (dt <= 0.0) return;
 
     double uptime = (now - startup_time_).seconds();
-
     bool jam = false;
 
-    // Only check jam after grace period and only on speed
-    // Speed threshold: conveyor commanded to run but measured speed is too low
-    if (uptime > 35.0 && speed_received_) {
-      // Track how long speed has been too low
+    // Only check jam when belt is actively RUNNING
+    if (uptime > 35.0 && belt_state_ == "RUNNING" && speed_received_) {
       if (measured_speed_ < speed_threshold_) {
         time_speed_low_ += dt;
       } else {
-        time_speed_low_ = 0.0;  // Reset when speed recovers
+        time_speed_low_ = 0.0;
       }
 
-      // Only jam if speed has been low for sustained period (5 seconds)
       if (time_speed_low_ > 5.0) {
         jam = true;
         jam_duration_ += dt;
@@ -77,6 +86,7 @@ private:
   }
 
   rclcpp::Subscription<std_msgs::msg::Float32>::SharedPtr    speed_sub_;
+  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr     belt_status_sub_;
   rclcpp::Publisher<conveyor_sort::msg::JamAlert>::SharedPtr jam_pub_;
   rclcpp::TimerBase::SharedPtr timer_;
 
@@ -85,6 +95,7 @@ private:
   double jam_duration_    = 0.0;
   double speed_threshold_ = 0.15;
   bool   speed_received_  = false;
+  std::string belt_state_ = "STOPPED";
   rclcpp::Time last_time_;
   rclcpp::Time startup_time_;
 };
